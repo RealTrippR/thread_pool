@@ -1,0 +1,14 @@
+{
+    "files.associations": {
+        "*.embeddedhtml": "html",
+        "*.ejs": "html",
+        "cthreads.h": "c",
+        "threadpool.h": "c",
+        "stdint.h": "c",
+        "stdlib.h": "c",
+        "xutility": "c",
+        "atomic": "c",
+        "memory": "c",
+        "iosfwd": "c"
+    }
+}
