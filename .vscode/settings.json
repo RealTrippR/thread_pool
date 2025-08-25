@@ -9,6 +9,11 @@
         "xutility": "c",
         "atomic": "c",
         "memory": "c",
-        "iosfwd": "c"
+        "iosfwd": "c",
+        "crtdbg.h": "c",
+        "ctime": "c",
+        "stdio.h": "c",
+        "stdatomic.h": "c",
+        "errno.h": "c"
     }
 }
