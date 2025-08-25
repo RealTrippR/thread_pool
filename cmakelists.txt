@@ -1,0 +1,9 @@
+cmake_minimum_required(3.20)
+
+project(THREAD_POOL_OBJ)
+
+# Define an object library
+add_library(my_objects OBJECT source1.cpp source2.cpp)
+
+# Use the object files in another target
+add_executable(my_program main.cpp $<TARGET_OBJECTS:my_objects>)

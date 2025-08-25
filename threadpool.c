@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <time.h>
+#include <assert.h>
 
 typedef	uint8_t u8;
 typedef int8_t i8;
@@ -40,6 +41,7 @@ typedef struct
     u16 activeWorkerCount;
     u16 taskQueueCount;
     u32 timeoutMS;
+    u32 id;
     _Atomic u8 stopsRecieved;
     struct cthreads_mutex mutex;
 } ThreadPool;
@@ -50,19 +52,41 @@ static errno_t deactivateWorker(ThreadPool* pool, u16 workerIdx);
 
 static errno_t stopPool(ThreadPool* pool);
 
+static errno_t pauseAllPools();
 
+static errno_t unpauseAllPools();
 
- ThreadPool* threadPools=NULL;
- u32 threadPoolCount=0u;
+typedef struct {
+    _Atomic u8 flag;
+    _Atomic u32 pausedOrResumedPoolCount;
+} PauseState;
 
- 
+PauseState pauseState={0,0};
+
+ThreadPool* threadPools=NULL;
+u32 threadPoolCount=0u;
+u32* threadPoolIdToIndexMap=NULL;
+u32 maxId=0u;
+
 typedef struct {
     u16 threadIndex;
     u16 threadPoolId;
     u32 timeoutMS;
 } threadWorkerLoopArgs;
 
-ThreadPoolTask popTaskFromTaskQueue(ThreadPool* pool)
+static ThreadPool* getThreadPoolFromId(u32 id)
+{
+    if (id > maxId) {
+        return NULL;
+    } else {
+        const u32 idx = threadPoolIdToIndexMap[id];
+        if (idx >= threadPoolCount) {
+            return NULL;}
+        return threadPools + idx;
+    }
+}
+
+static ThreadPoolTask popTaskFromTaskQueue(ThreadPool* pool)
 {
     ThreadPoolTask task = pool->taskQueue[0];
     u16 i;
@@ -76,40 +100,64 @@ ThreadPoolTask popTaskFromTaskQueue(ThreadPool* pool)
 void* threadWorkerLoop(void* __args)
 {
     threadWorkerLoopArgs args = *((threadWorkerLoopArgs*)__args);
-    ThreadPool* pool = &threadPools[args.threadPoolId];
-
+  
+    bool paused=false;
     clock_t lastActiveT=clock();
     while (1)
     {
-        cthreads_mutex_lock(&pool->mutex);
-        if (pool->stopMask[args.threadIndex]!=0) {
-            u8 stopsRecieved = atomic_load(&pool->stopsRecieved);
-            stopsRecieved++;
-            pool->workers[args.threadIndex].active = false;
-            pool->activeWorkerCount--;
-            atomic_store(&pool->stopsRecieved, stopsRecieved);
-            cthreads_mutex_unlock(&pool->mutex);
-            free(__args);
-            return NULL;
-        }
-        if (pool->taskQueueCount>0) {
-            ThreadPoolTask task = popTaskFromTaskQueue(pool);
-            ThreadPoolTaskHandlePRIVATE* hdl = (ThreadPoolTaskHandlePRIVATE*)task.hdl;
-            task.func(task.args);
-            atomic_store(&hdl->state,1);
-            lastActiveT = clock();
-        }
-        if (args.timeoutMS!=0) {
-            f64 timeInactiveMS = (f64)(clock() - lastActiveT) / CLOCKS_PER_SEC *  1000.0;
-            if (timeInactiveMS>args.timeoutMS) {
-                pool->workers[args.threadIndex].active = false;
-                pool->activeWorkerCount--;
-                free(__args);
+        u8 pauseFlag = atomic_load(&pauseState.flag);
+
+        if (paused) {
+            if (pauseFlag==0) {
+                paused=false;
+                // inc unpause count
+                atomic_fetch_add_explicit(&pauseState.pausedOrResumedPoolCount, 1u, memory_order_acq_rel);
+                continue;
+            }
+        } else {
+            if (pauseFlag!=0) {
+                paused=true;
+                // inc pause count
+                atomic_fetch_add_explicit(&pauseState.pausedOrResumedPoolCount, 1u, memory_order_acq_rel);
+                continue;
+            }
+            ThreadPool* pool = getThreadPoolFromId(args.threadPoolId);
+            if (!pool)
+                return (void*)-1;
+
+
+            cthreads_mutex_lock(&pool->mutex);
+            if (pool->stopMask[args.threadIndex]!=0) {
+                u8 stopsRecieved = atomic_load(&pool->stopsRecieved);
+                stopsRecieved++;
+                if (args.threadIndex < pool->activeWorkerCount) {
+                    pool->workers[args.threadIndex].active = false;
+                    pool->activeWorkerCount--;
+                }
+                atomic_store(&pool->stopsRecieved, stopsRecieved);
                 cthreads_mutex_unlock(&pool->mutex);
+                free(__args);
                 return NULL;
             }
+            if (pool->taskQueueCount>0) {
+                ThreadPoolTask task = popTaskFromTaskQueue(pool);
+                ThreadPoolTaskHandlePRIVATE* hdl = (ThreadPoolTaskHandlePRIVATE*)task.hdl;
+                task.func(task.args);
+                atomic_store(&hdl->state,1);
+                lastActiveT = clock();
+            }
+            if (args.timeoutMS!=0) {
+                f64 timeInactiveMS = (f64)(clock() - lastActiveT) / CLOCKS_PER_SEC *  1000.0;
+                if (timeInactiveMS>args.timeoutMS) {
+                    pool->workers[args.threadIndex].active = false;
+                    pool->activeWorkerCount--;
+                    free(__args);
+                    cthreads_mutex_unlock(&pool->mutex);
+                    return NULL;
+                }
+            }
+            cthreads_mutex_unlock(&pool->mutex);
         }
-        cthreads_mutex_unlock(&pool->mutex);
     }
 };
 
@@ -118,15 +166,24 @@ THREAD_POOL_API errno_t ThreadPoolNew(ThreadPoolHandle* th, u32 timeoutMS)
     if (threadPoolCount==UINT32_MAX || th->threadCount==0u) {
         return -1;
     }
-    threadPoolCount++;
-    threadPools = realloc(threadPools,sizeof(ThreadPool)*threadPoolCount);
+    th->id = threadPoolCount;
+
+    void* tmpPools = realloc(threadPools,sizeof(ThreadPool)*(threadPoolCount+1));
+    void* tmpIdMap = realloc(threadPoolIdToIndexMap, sizeof(threadPoolIdToIndexMap[0]) * ((maxId > th->id ? maxId : th->id)+1));
     struct cthreads_args* argList = malloc(sizeof(struct cthreads_args) * th->threadCount);
-    if (!threadPools||!argList) {
+    if (!tmpPools||!tmpIdMap||!argList) {
+        threadPoolCount--;
         return -1;
     }
-    th->id = threadPoolCount-1;
+    if (th->id>maxId) {
+        maxId = th->id;
+    }
+    threadPoolCount++;
+    threadPools=tmpPools;
+    threadPoolIdToIndexMap=tmpIdMap;
     
-
+    
+    
     ThreadPool* pool = threadPools + (threadPoolCount-1);
     pool->workers = calloc(th->threadCount, sizeof(pool->workers[0]));
     pool->workerCount = th->threadCount;
@@ -136,6 +193,12 @@ THREAD_POOL_API errno_t ThreadPoolNew(ThreadPoolHandle* th, u32 timeoutMS)
     pool->stopMask = calloc(th->threadCount, sizeof(u8));
     pool->stopsRecieved = 0u;
     pool->timeoutMS = timeoutMS;
+    pool->id = th->id;
+    
+    if (cthreads_mutex_init(&pool->mutex, NULL))
+        return -1;
+
+    threadPoolIdToIndexMap[th->id] = threadPoolCount-1;
 
     u32 i;
     for (i = 0; i < th->threadCount; ++i)
@@ -157,7 +220,8 @@ THREAD_POOL_API errno_t ThreadPoolNew(ThreadPoolHandle* th, u32 timeoutMS)
         int res = 0;
         WorkerHandle* worker = pool->workers + i;
         res = cthreads_thread_create(&worker->thread, NULL, targs->func, targs->data, targs);
-        cthreads_mutex_init(&worker->mutex, NULL);
+        if (cthreads_mutex_init(&worker->mutex, NULL))
+            res=-1;
     skip__:
         if (res!=0 || !targs->data){
             /*cleanup*/
@@ -165,7 +229,10 @@ THREAD_POOL_API errno_t ThreadPoolNew(ThreadPoolHandle* th, u32 timeoutMS)
                 free(pool->workers);
             }
             threadPoolCount--;
-            threadPools = realloc(threadPools,sizeof(ThreadPool)*threadPoolCount);
+            tmpPools = realloc(threadPools,sizeof(ThreadPool)*threadPoolCount);
+            if (!tmpPools)
+                return res;
+            threadPools=tmpPools;
             return res;
         }
     }
@@ -185,10 +252,9 @@ THREAD_POOL_API errno_t ThreadPoolNew(ThreadPoolHandle* th, u32 timeoutMS)
 
 THREAD_POOL_API errno_t ThreadPoolDestroy(ThreadPoolHandle* tpHdl)
 {
-    if (tpHdl->id>=threadPoolCount)
+    ThreadPool* th = getThreadPoolFromId(tpHdl->id);
+    if (!th)
         return -1;
-    
-    ThreadPool* th = threadPools + tpHdl->id;
 
     errno_t errcode = stopPool(th);
 
@@ -206,16 +272,81 @@ THREAD_POOL_API errno_t ThreadPoolDestroy(ThreadPoolHandle* tpHdl)
     }
     th->workerCount = 0;
     th->activeWorkerCount = 0;
+
+    u32 poolIdx = th - threadPools;
+    /*update max id and move indices down*/
+    if (pauseAllPools()!=0)
+        return -2;
+
+    cthreads_mutex_destroy(&th->mutex);
+
+
+    u32 i;
+    u32 newMaxId=0;
+    for (i=0; i<=maxId;++i)
+    {
+        if (threadPoolIdToIndexMap[i]>poolIdx) {
+            threadPoolIdToIndexMap[i]--;
+        }
+        ThreadPool* pool = getThreadPoolFromId(i);
+        if (pool && pool->id > maxId) {
+            newMaxId = pool->id;
+        }
+    }
+    
+    u32 ii = threadPoolIdToIndexMap[1];
+    if (maxId!=newMaxId) {
+        maxId = newMaxId;
+        void *tmp = realloc(threadPoolIdToIndexMap, sizeof(threadPoolIdToIndexMap[0])*(maxId+1));
+        if (!tmp) {
+            errno_t errcode = -1;
+             // unlock all mutexes
+            for (i = 0; i < threadPoolCount; ++i) {
+                if (i==poolIdx)
+                    continue;
+                ThreadPool* pool = threadPools+i;
+                if (cthreads_mutex_unlock(&pool->mutex)!=0)
+                    errcode = -2;
+            }
+            if (unpauseAllPools()!=0)
+                errcode=-2;
+
+            return -1;
+        }
+        threadPoolIdToIndexMap=tmp;
+    }
+
+    threadPoolCount--;
+    if (threadPoolCount==0) {
+        free(threadPools);
+        threadPools=NULL;
+        free(threadPoolIdToIndexMap);
+        threadPoolIdToIndexMap=NULL;
+        maxId = 0u;
+    } else {
+        // move threadpools down
+        u64 s = sizeof(threadPools[0])*(threadPoolCount-poolIdx);\
+        ThreadPool* src = threadPools+poolIdx+1;
+        ThreadPool* dst = threadPools+poolIdx;
+        memmove(dst, src, s);
+
+        threadPools = realloc(threadPools,sizeof(threadPools[1]) * threadPoolCount);
+    }
+    
+    if (unpauseAllPools()!=0)
+        errcode=-2;
+
+    /* invalidate handle. */
+    tpHdl->id = -1;
     return errcode;
 }
 
 THREAD_POOL_API errno_t launchTask(ThreadPoolHandle tpHdl, ThreadPoolTask task, ThreadPoolTaskHandle* taskHdl__)
 {
-    if (tpHdl.id >= threadPoolCount)
-        return -1;
-    
     ThreadPoolTaskHandlePRIVATE* taskHdl = (ThreadPoolTaskHandlePRIVATE*)taskHdl__;
-    ThreadPool* pool = threadPools + tpHdl.id;
+    ThreadPool* pool = getThreadPoolFromId(tpHdl.id);
+    if (!pool)
+        return -1;
     cthreads_mutex_lock(&pool->mutex);
 
     task.hdl = taskHdl__;
@@ -305,12 +436,62 @@ static errno_t stopPool(ThreadPool* pool)
 {
     memset(pool->stopMask, 1, sizeof(u8) * pool->workerCount);
     
+    atomic_store(&pool->stopsRecieved, 0);
     u8 stops = atomic_load(&pool->stopsRecieved);
     while (stops!=pool->workerCount && pool->activeWorkerCount>0)
     {
         stops = atomic_load(&pool->stopsRecieved);
     }
     atomic_store(&pool->stopsRecieved, 0);
+    return 0;
+}
+
+static errno_t pauseAllPools()
+{
+    u32 totalWorkerCount = 0;
+    u32 i;
+    for (i = 0; i < threadPoolCount; ++i)
+    {
+        totalWorkerCount+=threadPools[i].activeWorkerCount;
+    }
+
+    u8 flag = atomic_load(&pauseState.flag);
+    if (flag==1) {
+        return -1; /* flag is already set to paused */
+    }
+    atomic_store(&pauseState.pausedOrResumedPoolCount, 0);
+    atomic_store(&pauseState.flag, 1);
+    
+    u32 c = atomic_load(&pauseState.pausedOrResumedPoolCount);
+    while (c!=totalWorkerCount)
+    {
+        c = atomic_load(&pauseState.pausedOrResumedPoolCount);
+    }
+    return 0;
+}
+
+static errno_t unpauseAllPools()
+{
+    u32 totalWorkerCount = 0;
+    u32 i;
+    for (i = 0; i < threadPoolCount; ++i)
+    {
+        totalWorkerCount+=threadPools[i].activeWorkerCount;
+    }
+    u8 flag = atomic_load(&pauseState.flag);
+    if (flag==0) {
+        return -1; /* flag is already set to unpaused */
+    }
+
+    atomic_store(&pauseState.pausedOrResumedPoolCount, 0);
+    atomic_store(&pauseState.flag, 0);
+
+    u32 c = atomic_load(&pauseState.pausedOrResumedPoolCount);
+    while (c!=totalWorkerCount)
+    {
+        c = atomic_load(&pauseState.pausedOrResumedPoolCount);
+    }
+    
     return 0;
 }
 

@@ -7,7 +7,6 @@
             "args": [
                 "-fdiagnostics-color=always",
                 "-g",
-                "-O2",
                 "-std=c11",
                 "${file}",
                 "cthreads.c",

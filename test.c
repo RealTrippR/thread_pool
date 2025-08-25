@@ -13,24 +13,33 @@ int main(int argc, char **argv)
 {
     _CrtSetDbgFlag(_CRTDBG_LEAK_CHECK_DF);
     ThreadPoolHandle tpHdl;
+    ThreadPoolHandle tpHdl2;
     tpHdl.threadCount = 2;
+    tpHdl2.threadCount = 4;
     if (ThreadPoolNew(&tpHdl, THREAD_TIMEOUT_MS))
+        return EXIT_FAILURE;
+    if (ThreadPoolNew(&tpHdl2, THREAD_TIMEOUT_MS))
         return EXIT_FAILURE;
 
     
     ThreadPoolTask task;
     task.args = NULL;
     task.func = printHello;
+    
     ThreadPoolTaskHandle taskHdl;
     if (launchTask(tpHdl, task, &taskHdl))
         return EXIT_FAILURE;
     joinTask(&taskHdl);
+    if (ThreadPoolDestroy(&tpHdl))
+       return EXIT_FAILURE;
 
-    if (launchTask(tpHdl, task, &taskHdl))
+
+    if (launchTask(tpHdl2, task, &taskHdl))
         return EXIT_FAILURE;
     joinTask(&taskHdl);
 
-    if (ThreadPoolDestroy(&tpHdl))
+
+    if (ThreadPoolDestroy(&tpHdl2))
         return EXIT_FAILURE;
 
     return EXIT_SUCCESS;
