@@ -80,6 +80,7 @@ static ThreadPool* getThreadPoolFromId(u32 id)
         return NULL;
     } else {
         const u32 idx = threadPoolIdToIndexMap[id];
+        printf("%d ", idx);
         if (idx >= threadPoolCount) {
             return NULL;}
         return threadPools + idx;
@@ -203,8 +204,6 @@ THREAD_POOL_API errno_t ThreadPoolNew(ThreadPoolHandle* th, u32 timeoutMS)
     u32 i;
     for (i = 0; i < th->threadCount; ++i)
     {
-    
-  
         struct cthreads_args* targs = argList+i;
         targs->func = threadWorkerLoop;
         targs->data = malloc(sizeof(threadWorkerLoopArgs));
@@ -285,16 +284,20 @@ THREAD_POOL_API errno_t ThreadPoolDestroy(ThreadPoolHandle* tpHdl)
     u32 newMaxId=0;
     for (i=0; i<=maxId;++i)
     {
-        if (threadPoolIdToIndexMap[i]>poolIdx) {
-            threadPoolIdToIndexMap[i]--;
-        }
         ThreadPool* pool = getThreadPoolFromId(i);
-        if (pool && pool->id > maxId) {
+        if (pool && pool->id >= maxId) {
             newMaxId = pool->id;
         }
     }
+
+    /*this has to come after the max id is found to ensure correct indexing*/
+    for (i=0; i<=maxId;++i)
+    {
+        if (threadPoolIdToIndexMap[i]>poolIdx) {
+            threadPoolIdToIndexMap[i]--;
+        }
+    }
     
-    u32 ii = threadPoolIdToIndexMap[1];
     if (maxId!=newMaxId) {
         maxId = newMaxId;
         void *tmp = realloc(threadPoolIdToIndexMap, sizeof(threadPoolIdToIndexMap[0])*(maxId+1));
