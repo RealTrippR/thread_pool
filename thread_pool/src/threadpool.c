@@ -537,6 +537,7 @@ static errno_t unpauseAllPools()
     atomic_store(&pauseState.flag, 0);
 
     if (totalWorkerCount==0u) {
+        atomic_store(&pauseState.flag, 2);
         return 0; } 
 
     u32 c = atomic_load(&pauseState.pausedOrResumedPoolCount);
@@ -562,6 +563,7 @@ static errno_t unpauseAllPoolsInRange(u32 startPoolIdx, u32 count)
 
     u8 flag = atomic_load(&pauseState.flag);
     if (flag==0) {
+        atomic_store(&pauseState.flag, 2);
         return -1; /* flag is already set to unpaused */
     }
 
