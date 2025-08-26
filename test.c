@@ -12,7 +12,8 @@ void* printHello(void*__args__)
 int main(int argc, char **argv)
 {
     uint32_t i = 0;
-    for (i < 0; i < 1000;++i) {
+    for (i < 0; i < 1000; ++i) 
+    {
         _CrtSetDbgFlag(_CRTDBG_LEAK_CHECK_DF);
         ThreadPoolHandle tpHdl;
         ThreadPoolHandle tpHdl2;
