@@ -34,7 +34,7 @@ int main(int argc, char **argv)
        return EXIT_FAILURE;
 
 
-    //_sleep(1000);
+    _sleep(1000);
 
     if (launchTask(tpHdl2, task, &taskHdl))
         return EXIT_FAILURE;

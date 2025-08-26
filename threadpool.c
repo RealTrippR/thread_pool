@@ -80,7 +80,6 @@ static ThreadPool* getThreadPoolFromId(u32 id)
         return NULL;
     } else {
         const u32 idx = threadPoolIdToIndexMap[id];
-        printf("%d ", idx);
         if (idx >= threadPoolCount) {
             return NULL;}
         return threadPools + idx;
