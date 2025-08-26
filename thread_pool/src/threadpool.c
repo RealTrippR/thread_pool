@@ -1,4 +1,21 @@
-#include "threadpool.h"
+/*
+Copyright (C) 2025 Tripp Robins
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this
+software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons
+to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+#include <threadpool.h>
 #include "cthreads.h"
 #include "stdio.h"
 #include <stdatomic.h>
@@ -161,7 +178,7 @@ void* threadWorkerLoop(void* __args)
     }
 };
 
-THREAD_POOL_API errno_t ThreadPoolNew(ThreadPoolHandle* th, u32 timeoutMS)
+THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
 {
     if (threadPoolCount==UINT32_MAX || th->threadCount==0u) {
         return -1;
@@ -248,7 +265,7 @@ THREAD_POOL_API errno_t ThreadPoolNew(ThreadPoolHandle* th, u32 timeoutMS)
     return 0;
 }
 
-THREAD_POOL_API errno_t ThreadPoolDestroy(ThreadPoolHandle* tpHdl)
+THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
 {
     ThreadPool* th = getThreadPoolFromId(tpHdl->id);
     if (!th)
@@ -343,7 +360,7 @@ THREAD_POOL_API errno_t ThreadPoolDestroy(ThreadPoolHandle* tpHdl)
     return errcode;
 }
 
-THREAD_POOL_API errno_t launchTask(ThreadPoolHandle tpHdl, ThreadPoolTask task, ThreadPoolTaskHandle* taskHdl__)
+THREAD_POOL_API errno_t ThreadPool_LaunchTask(ThreadPoolHandle tpHdl, ThreadPoolTask task, ThreadPoolTaskHandle* taskHdl__)
 {
     ThreadPoolTaskHandlePRIVATE* taskHdl = (ThreadPoolTaskHandlePRIVATE*)taskHdl__;
     ThreadPool* pool = getThreadPoolFromId(tpHdl.id);
@@ -497,7 +514,7 @@ static errno_t unpauseAllPools()
     return 0;
 }
 
-THREAD_POOL_API void joinTask(ThreadPoolTaskHandle* taskHdl__)
+THREAD_POOL_API void ThreadPool_JoinTask(ThreadPoolTaskHandle* taskHdl__)
 {
     ThreadPoolTaskHandlePRIVATE* taskHdl = (ThreadPoolTaskHandlePRIVATE*)taskHdl__;
     uint8_t state = atomic_load(&taskHdl->state);

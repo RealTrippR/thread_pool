@@ -1,9 +1,13 @@
-cmake_minimum_required(3.20)
+cmake_minimum_required(VERSION 3.20)
 
-project(THREAD_POOL_OBJ)
+project(Thread_Pool)
 
 # Define an object library
-add_library(my_objects OBJECT source1.cpp source2.cpp)
+add_library(Thread_Pool OBJECT thread_pool/src/threadpool.c)
 
-# Use the object files in another target
-add_executable(my_program main.cpp $<TARGET_OBJECTS:my_objects>)
+target_include_directories(Thread_Pool PRIVATE thread_pool)
+target_include_directories(Thread_Pool PRIVATE thread_pool/deps)
+
+if(THREAD_POOL_BUILD_AS_X32)
+    set_target_properties(Thread_Pool PROPERTIES COMPILE_OPTIONS "-m32" LINK_FLAGS "-m32")
+endif()
