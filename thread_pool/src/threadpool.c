@@ -82,6 +82,7 @@ typedef struct {
 
 PauseState pauseState={2,0};
 
+struct cthreads_mutex globalMutex;
 ThreadPool* threadPools=NULL;
 u32 threadPoolCount=0u;
 u32* threadPoolIdToIndexMap=NULL;
@@ -127,6 +128,32 @@ void* threadWorkerLoop(void* __args)
         u8 pauseFlag = atomic_load(&pauseState.flag);
 
         if (paused) {
+            cthreads_mutex_lock(&globalMutex);
+            ThreadPool* pool = getThreadPoolFromId(args.threadPoolId);
+            if (!pool) {
+                *(u8*)0 = 0;
+                cthreads_mutex_unlock(&globalMutex);
+                return (void*)-1;
+            } else {
+                cthreads_mutex_lock(&pool->mutex);
+                // check stop mask
+                if (pool->stopMask[args.threadIndex]!=0) {
+                    u8 stopsRecieved = atomic_load(&pool->stopsRecieved);
+                    stopsRecieved++;
+                    if (args.threadIndex < pool->activeWorkerCount) {
+                        pool->workers[args.threadIndex].active = false;
+                        pool->activeWorkerCount--;
+                    }
+                    atomic_store(&pool->stopsRecieved, stopsRecieved);
+                    cthreads_mutex_unlock(&pool->mutex);
+                    cthreads_mutex_unlock(&globalMutex);
+                    free(__args);
+                    return NULL;
+                }
+                cthreads_mutex_unlock(&pool->mutex);
+            }
+            cthreads_mutex_unlock(&globalMutex);
+
             if (pauseFlag==0) {
                 paused=false;
                 // inc unpause count
@@ -141,11 +168,17 @@ void* threadWorkerLoop(void* __args)
                 continue;
             }
             ThreadPool* pool = getThreadPoolFromId(args.threadPoolId);
-            if (!pool)
+            if (!pool) {
+                if (args.threadIndex < pool->activeWorkerCount) {
+                    pool->workers[args.threadIndex].active = false;
+                    pool->activeWorkerCount--;
+                }
                 return (void*)-1;
-
+            }
 
             cthreads_mutex_lock(&pool->mutex);
+
+            // check stop mask
             if (pool->stopMask[args.threadIndex]!=0) {
                 u8 stopsRecieved = atomic_load(&pool->stopsRecieved);
                 stopsRecieved++;
@@ -187,7 +220,14 @@ THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
     }
     th->id = threadPoolCount;
 
+    if (threadPoolCount==0) {
+        cthreads_mutex_init(&globalMutex,NULL);
+    }
+
+    cthreads_mutex_lock(&globalMutex);
+
     if (pauseAllPools()) {
+        cthreads_mutex_unlock(&globalMutex);
         return -2; }
     
     void* tmpPools = realloc(threadPools,sizeof(ThreadPool)*(threadPoolCount+1));
@@ -196,6 +236,7 @@ THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
     if (!tmpPools||!tmpIdMap||!argList) {
         if (threadPoolCount>0) {
         threadPoolCount--;}
+        cthreads_mutex_unlock(&globalMutex);
         return -1;
     }
     if (th->id>maxId) {
@@ -221,13 +262,15 @@ THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
     pool->stopsRecieved = 0u;
     pool->timeoutMS = timeoutMS;
     pool->id = th->id;
-    
+    threadPoolIdToIndexMap[th->id] = threadPoolCount-1;
+
+    cthreads_mutex_unlock(&globalMutex);
+
     if (cthreads_mutex_init(&pool->mutex, NULL)) {
         unpauseAllPoolsInRange(0,prevPoolCount);
         return -1;
     }
 
-    threadPoolIdToIndexMap[th->id] = threadPoolCount-1;
 
     u32 i;
     for (i = 0; i < th->threadCount; ++i)
@@ -291,6 +334,8 @@ THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
         return -1;
 
     errno_t errcode = stopPool(th);
+
+    cthreads_mutex_lock(&globalMutex);
 
     if (th->workers) 
     {
@@ -356,6 +401,7 @@ THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
 
     threadPoolCount--;
     if (threadPoolCount==0) {
+        cthreads_mutex_destroy(&globalMutex);
         free(threadPools);
         threadPools=NULL;
         free(threadPoolIdToIndexMap);
@@ -371,9 +417,12 @@ THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
         threadPools = realloc(threadPools,sizeof(threadPools[1]) * threadPoolCount);
     }
     
+    if (threadPoolCount>0) {
+        cthreads_mutex_unlock(&globalMutex);
+    }
+
     if (unpauseAllPools()!=0) {
         errcode=-2; }
-
     /* invalidate handle. */
     tpHdl->id = -1;
     return errcode;
@@ -472,11 +521,15 @@ static errno_t deactivateWorker(ThreadPool* pool, u16 workerIdx)
 
 static errno_t stopPool(ThreadPool* pool)
 {
-    memset(pool->stopMask, 1, sizeof(u8) * pool->workerCount);
-    
     atomic_store(&pool->stopsRecieved, 0);
+    u32 activeWorkerCount;
+    cthreads_mutex_lock(&pool->mutex);
+    memset(pool->stopMask, 1, sizeof(u8) * pool->workerCount);
+    activeWorkerCount=pool->activeWorkerCount;
+    cthreads_mutex_unlock(&pool->mutex);
+
     u8 stops = atomic_load(&pool->stopsRecieved);
-    while (stops!=pool->workerCount && pool->activeWorkerCount>0)
+    while (stops!=activeWorkerCount && pool->activeWorkerCount>0)
     {
         stops = atomic_load(&pool->stopsRecieved);
     }
@@ -510,6 +563,15 @@ static errno_t pauseAllPools()
     u32 c = atomic_load(&pauseState.pausedOrResumedPoolCount);
     while (c!=totalWorkerCount)
     {
+        totalWorkerCount=0;
+        // must be recomputed every cycle to get an accurate count (Some threads be deactivate before getting the pause flag)
+        u32 i;
+        for (i = 0; i < threadPoolCount; ++i)
+        {
+            cthreads_mutex_lock(&threadPools[i].mutex);
+            totalWorkerCount+=threadPools[i].activeWorkerCount;
+            cthreads_mutex_unlock(&threadPools[i].mutex);
+        }
         c = atomic_load(&pauseState.pausedOrResumedPoolCount);
     }
     atomic_store(&pauseState.flag, 2);
@@ -543,6 +605,15 @@ static errno_t unpauseAllPools()
     u32 c = atomic_load(&pauseState.pausedOrResumedPoolCount);
     while (c<totalWorkerCount)
     {
+        totalWorkerCount=0;
+        // must be recomputed every cycle to get an accurate count (Some threads be deactivate before getting the pause flag)
+        u32 i;
+        for (i = 0; i < threadPoolCount; ++i)
+        {
+            cthreads_mutex_lock(&threadPools[i].mutex);
+            totalWorkerCount+=threadPools[i].activeWorkerCount;
+            cthreads_mutex_unlock(&threadPools[i].mutex);
+        }
         c = atomic_load(&pauseState.pausedOrResumedPoolCount);
     }
     atomic_store(&pauseState.flag, 2);
@@ -576,6 +647,15 @@ static errno_t unpauseAllPoolsInRange(u32 startPoolIdx, u32 count)
     u32 c = atomic_load(&pauseState.pausedOrResumedPoolCount);
     while (c<totalWorkerCount)
     {
+        totalWorkerCount=0u;
+        // must be recomputed every cycle to get an accurate count (Some threads be deactivate before getting the pause flag)
+        u32 i;
+        for (i = startPoolIdx; i < startPoolIdx+count; ++i)
+        {
+            cthreads_mutex_lock(&threadPools[i].mutex);
+            totalWorkerCount+=threadPools[i].activeWorkerCount;
+            cthreads_mutex_unlock(&threadPools[i].mutex);
+        }
         c = atomic_load(&pauseState.pausedOrResumedPoolCount);
     }
     atomic_store(&pauseState.flag, 2);
