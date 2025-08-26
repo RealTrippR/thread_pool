@@ -15,6 +15,9 @@
         "stdio.h": "c",
         "stdatomic.h": "c",
         "errno.h": "c",
-        "time.h": "c"
+        "time.h": "c",
+        "algorithm": "c",
+        "format": "c",
+        "random": "c"
     }
 }
