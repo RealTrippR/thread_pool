@@ -7,7 +7,7 @@
             "args": [
                 "-fdiagnostics-color=always",
                 "-g",
-                //"-O2",
+                "-O2",
                 "-std=c11",
                 "${file}",
                 "-Ithread_pool",

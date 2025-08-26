@@ -18,6 +18,9 @@
         "time.h": "c",
         "algorithm": "c",
         "format": "c",
-        "random": "c"
+        "random": "c",
+        "array": "c",
+        "string": "c",
+        "span": "c"
     }
 }
