@@ -59,14 +59,13 @@ THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle*);
 Launches a task.
 @param ThreadPoolHandle* - a handle to the thread pool.
 @param ThreadPoolTask task - the task to launch.
-@param ThreadPoolTaskHandle* taskHdlOut - a handle to the task.
+@param ThreadPoolTaskHandle* taskHdl - a handle to the task.
 @return errno_t - 0 upon success, non-zero value upon failure.*/
-THREAD_POOL_API errno_t ThreadPool_LaunchTask(ThreadPoolHandle tpHdl, ThreadPoolTask task, ThreadPoolTaskHandle* taskHdlOut);
+THREAD_POOL_API errno_t ThreadPool_LaunchTask(ThreadPoolHandle tpHdl, ThreadPoolTask task, ThreadPoolTaskHandle* taskHdl);
 
 /*
 Waits for a task to complete 
-@param ThreadPoolTaskHandle* - the handle to wait for.
-@return errno_t - 0 upon success, non-zero value upon failure.*/
+@param ThreadPoolTaskHandle* - the handle to wait for.*/
 THREAD_POOL_API void ThreadPool_JoinTask(ThreadPoolTaskHandle* taskHdl);
 
 

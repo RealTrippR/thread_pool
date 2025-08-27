@@ -45,7 +45,8 @@ int main(int argc, char **argv)
         ThreadPoolTask task;
         task.args = args+i;
         task.func = sumRange;
-        if (ThreadPool_LaunchTask(tpHdl, task, taskHdls+i))
+        task.hdl = taskHdls+i;
+        if (ThreadPool_LaunchTask(tpHdl, task))
             return EXIT_FAILURE;
     }
     for (uint32_t i = 0; i < ITR_COUNT; ++i)

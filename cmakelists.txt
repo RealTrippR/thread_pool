@@ -8,6 +8,10 @@ add_library(Thread_Pool OBJECT thread_pool/src/threadpool.c)
 target_include_directories(Thread_Pool PRIVATE thread_pool)
 target_include_directories(Thread_Pool PRIVATE thread_pool/deps)
 
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_options(-O2)
+endif()
+
 if(THREAD_POOL_BUILD_AS_X32)
     set_target_properties(Thread_Pool PROPERTIES COMPILE_OPTIONS "-m32" LINK_FLAGS "-m32")
 endif()
