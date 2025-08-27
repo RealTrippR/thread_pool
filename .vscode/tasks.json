@@ -6,7 +6,7 @@
             "command": "C:\\msys64\\ucrt64\\bin\\gcc.exe",
             "args": [
                 "-fdiagnostics-color=always",
-                "-g",
+               // "-g",
                 "-O2",
                 "-std=c11",
                 "${file}",

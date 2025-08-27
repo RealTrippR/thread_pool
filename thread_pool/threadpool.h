@@ -45,7 +45,7 @@ typedef struct
 /*
 Creates a new thread pool.
 @param ThreadPoolHandle* - a handle to the thread pool.
-@param uint32_t timeoutMS* - the maximum time of inactivity in MS before an worker thread will close. 
+@param uint32_t timeoutMS* - the maximum time of inactivity in MS before an worker thread will close. Preferably this should be a decent bit of time to avoid the overhead caused by restarting an inactive thread.
 @return errno_t - 0 upon success, non-zero value upon failure.*/
 THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle*, uint32_t timeoutMS);
 
