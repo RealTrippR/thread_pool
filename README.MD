@@ -60,7 +60,8 @@ int main(int argc, char **argv)
     return EXIT_SUCCESS;
 }
 ```
-
+<ins> **Todo** </ins>
+- Fix segfault when cthreads_thread_detatch fails
 <ins> **Naming Conventions** </ins>
 - Preprocessor Macros: UPPER_SNAKE_CASE
 - Function Names: CamelCase
