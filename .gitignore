@@ -1,3 +1,7 @@
 build/
 *.exe
 .vs/
+build-debug-x64/
+build-debug-x32/
+build-release-x64/
+build-release-x32/

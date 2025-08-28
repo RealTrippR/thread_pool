@@ -1,12 +1,15 @@
-cmake -S . -B build-debug -DCMAKE_BUILD_TYPE=Debug
-
-
-BUILD_DIR="./build"
+BUILD_DIR="./build-debug-x64"
 mkdir -p "$BUILD_DIR"
-cd "$BUILD_DIR" || exit 1
+TO_DIR="./bin/debug-x64"
+mkdir -p "$TO_DIR"
 
-cmake -DTHREAD_POOL_BUILD_AS_X32=TRUE "$SRC_DIR"
-cmake --build .
-mdir binx64
+
+mkdir -p debug
+cmake -G "MinGW Makefiles" -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Debug
+cmake --build "$BUILD_DIR"
+
+cp "$BUILD_DIR/CMakeFiles/Thread_Pool.dir/thread_pool/src/threadpool.c.obj" "$TO_DIR"
+cp "$BUILD_DIR/CMakeFiles/Thread_Pool.dir/thread_pool/src/threadpool.c.obj.d" "$TO_DIR"
+
 echo "Press any key to continue..."
 read -n 1 -s
