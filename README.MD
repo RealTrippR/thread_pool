@@ -1,5 +1,6 @@
 ## threadpool.c ##
 <ins> Brief </ins>
+
 Threadpool.c is a threadpool implementation written in C11 with a C89 interface. 
 
 <ins> **Example**</ins>
@@ -62,6 +63,7 @@ int main(int argc, char **argv)
 ```
 <ins> **Todo** </ins>
 - Fix segfault when cthreads_thread_detatch fails
+
 <ins> **Naming Conventions** </ins>
 - Preprocessor Macros: UPPER_SNAKE_CASE
 - Function Names: CamelCase
