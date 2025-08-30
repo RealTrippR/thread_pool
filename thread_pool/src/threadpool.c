@@ -15,13 +15,19 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define THREADPOOL_DEBUG
+//#define THREADPOOL_DEBUG
 
 #include "threadpool.h"
 #include "cthreads.h"
 #include "stdio.h"
 #include <stdatomic.h>
 #include <stdlib.h>
+#ifdef THREADPOOL_DEBUG
+    #include <stdio.h>
+#endif
+#ifndef NDEBUG
+    #include <stdio.h>
+#endif
 #include <stdbool.h>
 #include <time.h>
 #include <assert.h>
@@ -185,7 +191,7 @@ void* threadWorkerLoop(void* __args)
             }
             ThreadPool* pool = getThreadPoolFromId(args.threadPoolId);
             if (!pool) {
-                #ifdef NDEBUG
+                #ifndef NDEBUG
                     assert(00&&"CRITICAL FAILURE");
                     printf("CRITICAL FAILURE\n");
                 #endif
