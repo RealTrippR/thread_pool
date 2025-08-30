@@ -21,8 +21,8 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 #include <time.h>
 #include <deps/cthreads.h>
 
-#define THREAD_TIMEOUT_MS 30000 // 30 seconds
-#define TASK_POOL_THREAD_COUNT 16
+#define THREAD_TIMEOUT_MS 100 // 30 seconds
+#define TASK_POOL_THREAD_COUNT 2
 #define ITR_COUNT 128
 #define BLOCK_SIZE 262144
 typedef struct 
@@ -81,6 +81,12 @@ int main(int argc, char **argv)
     {
         ThreadPool_JoinTask(taskHdls+i);
     }
+    printf("===== PAUSE =====");
+    _sleep(500);
+    for (uint32_t i = 0; i < ITR_COUNT; ++i)
+    {
+        ThreadPool_JoinTask(taskHdls+i);
+    }
     // -- END TIMING -- //
     double durationSec = ((double)(clock() - t)) / CLOCKS_PER_SEC;
 
@@ -110,6 +116,7 @@ int main(int argc, char **argv)
     {
         cthreads_thread_join(threads[i],NULL);
     }
+
     // -- END TIMING -- //
     durationSec = ((double)(clock() - t)) / CLOCKS_PER_SEC;
 

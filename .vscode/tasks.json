@@ -6,9 +6,8 @@
             "command": "C:\\msys64\\ucrt64\\bin\\gcc.exe",
             "args": [
                 "-fdiagnostics-color=always",
-                "-g",
-                //"-O2",
-                "-std=c11",
+                //"-g",
+                "-std=c17",
                 "${file}",
                 "-Ithread_pool",
                 "-Ithread_pool/deps",

@@ -15,6 +15,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+#define THREADPOOL_DEBUG
+
 #include "threadpool.h"
 #include "cthreads.h"
 #include "stdio.h"
@@ -96,6 +98,9 @@ typedef struct {
 
 static ThreadPool* getThreadPoolFromId(u32 id)
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("getThreadPoolFromId\n");
+    #endif
     if (id > maxId) {
         return NULL;
     } else {
@@ -108,6 +113,9 @@ static ThreadPool* getThreadPoolFromId(u32 id)
 
 static ThreadPoolTask popTaskFromTaskQueue(ThreadPool* pool)
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("popTaskFromTaskQueue\n");
+    #endif
     ThreadPoolTask task = pool->taskQueue[0];
     u16 i;
     for (i = 1; i < pool->taskQueueCount;++i) {
@@ -119,6 +127,9 @@ static ThreadPoolTask popTaskFromTaskQueue(ThreadPool* pool)
 
 void* threadWorkerLoop(void* __args)
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("threadWorkerLoop\n");
+    #endif
     threadWorkerLoopArgs args = *((threadWorkerLoopArgs*)__args);
   
     bool paused=false;
@@ -132,6 +143,10 @@ void* threadWorkerLoop(void* __args)
             ThreadPool* pool = getThreadPoolFromId(args.threadPoolId);
             if (!pool) {
                 *(u8*)0 = 0;
+                #ifndef NDEBUG
+                    assert(00&&"CRITICAL FAILURE");
+                    printf("CRITICAL FAILURE\n");
+                #endif
                 cthreads_mutex_unlock(&globalMutex);
                 return (void*)-1;
             } else {
@@ -140,10 +155,10 @@ void* threadWorkerLoop(void* __args)
                 if (pool->stopMask[args.threadIndex]!=0) {
                     u8 stopsRecieved = atomic_load(&pool->stopsRecieved);
                     stopsRecieved++;
-                    if (args.threadIndex < pool->activeWorkerCount) {
-                        pool->workers[args.threadIndex].active = false;
-                        pool->activeWorkerCount--;
-                    }
+                  
+                    pool->workers[args.threadIndex].active = false;
+                    pool->activeWorkerCount--;
+                    
                     atomic_store(&pool->stopsRecieved, stopsRecieved);
                     cthreads_mutex_unlock(&pool->mutex);
                     cthreads_mutex_unlock(&globalMutex);
@@ -152,7 +167,6 @@ void* threadWorkerLoop(void* __args)
                 }
                 cthreads_mutex_unlock(&pool->mutex);
             }
-            cthreads_mutex_unlock(&globalMutex);
 
             if (pauseFlag==0) {
                 paused=false;
@@ -160,6 +174,8 @@ void* threadWorkerLoop(void* __args)
                 atomic_fetch_add(&pauseState.pausedOrResumedPoolCount, 1u);
                 continue;
             }
+
+            cthreads_mutex_unlock(&globalMutex);
         } else {
             if (pauseFlag==1) {
                 paused=true;
@@ -169,10 +185,10 @@ void* threadWorkerLoop(void* __args)
             }
             ThreadPool* pool = getThreadPoolFromId(args.threadPoolId);
             if (!pool) {
-                if (args.threadIndex < pool->activeWorkerCount) {
-                    pool->workers[args.threadIndex].active = false;
-                    pool->activeWorkerCount--;
-                }
+                #ifdef NDEBUG
+                    assert(00&&"CRITICAL FAILURE");
+                    printf("CRITICAL FAILURE\n");
+                #endif
                 return (void*)-1;
             }
 
@@ -182,10 +198,9 @@ void* threadWorkerLoop(void* __args)
             if (pool->stopMask[args.threadIndex]!=0) {
                 u8 stopsRecieved = atomic_load(&pool->stopsRecieved);
                 stopsRecieved++;
-                if (args.threadIndex < pool->activeWorkerCount) {
-                    pool->workers[args.threadIndex].active = false;
-                    pool->activeWorkerCount--;
-                }
+                pool->workers[args.threadIndex].active = false;
+                pool->activeWorkerCount--;
+                
                 atomic_store(&pool->stopsRecieved, stopsRecieved);
                 cthreads_mutex_unlock(&pool->mutex);
                 free(__args);
@@ -198,16 +213,20 @@ void* threadWorkerLoop(void* __args)
                 atomic_store(&hdl->state,1);
                 lastActiveT = clock();
             }
+          
             if (args.timeoutMS!=0) {
                 f64 timeInactiveMS = (f64)(clock() - lastActiveT) / CLOCKS_PER_SEC *  1000.0;
                 if (timeInactiveMS>args.timeoutMS) {
+                    free(__args);
+
                     pool->workers[args.threadIndex].active = false;
                     pool->activeWorkerCount--;
-                    free(__args);
+                    
                     cthreads_mutex_unlock(&pool->mutex);
                     return NULL;
                 }
             }
+
             cthreads_mutex_unlock(&pool->mutex);
         }
     }
@@ -329,6 +348,9 @@ THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
 
 THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("ThreadPool_Destroy\n");
+    #endif
     ThreadPool* th = getThreadPoolFromId(tpHdl->id);
     if (!th)
         return -1;
@@ -430,6 +452,9 @@ THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
 
 THREAD_POOL_API errno_t ThreadPool_LaunchTask(ThreadPoolHandle tpHdl, ThreadPoolTask task, ThreadPoolTaskHandle* taskHdl__)
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("ThreadPool_LaunchTask\n");
+    #endif
     ThreadPoolTaskHandlePRIVATE* taskHdl = (ThreadPoolTaskHandlePRIVATE*)taskHdl__;
     ThreadPool* pool = getThreadPoolFromId(tpHdl.id);
     if (!pool)
@@ -471,6 +496,9 @@ THREAD_POOL_API errno_t ThreadPool_LaunchTask(ThreadPoolHandle tpHdl, ThreadPool
 
 static errno_t activateWorker(ThreadPool* pool, u16 poolId, u16 workerIdx)
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("activateWorker\n");
+    #endif
     if (workerIdx >= pool->workerCount)
         return -1;
 
@@ -504,6 +532,9 @@ static errno_t activateWorker(ThreadPool* pool, u16 poolId, u16 workerIdx)
 
 static errno_t deactivateWorker(ThreadPool* pool, u16 workerIdx)
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("deactivateWorker\n");
+    #endif
     if (workerIdx >= pool->workerCount)
         return -1;
     atomic_store(&pool->stopsRecieved, 0);
@@ -521,6 +552,9 @@ static errno_t deactivateWorker(ThreadPool* pool, u16 workerIdx)
 
 static errno_t stopPool(ThreadPool* pool)
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("stopPool\n");
+    #endif
     atomic_store(&pool->stopsRecieved, 0);
     u32 activeWorkerCount;
     cthreads_mutex_lock(&pool->mutex);
@@ -529,9 +563,17 @@ static errno_t stopPool(ThreadPool* pool)
     cthreads_mutex_unlock(&pool->mutex);
 
     u8 stops = atomic_load(&pool->stopsRecieved);
-    while (stops!=activeWorkerCount && pool->activeWorkerCount>0)
+    while (1)
     {
+        cthreads_mutex_lock(&pool->mutex);
+        if (stops==activeWorkerCount && pool->activeWorkerCount==0 ) {
+            break;
+        }
         stops = atomic_load(&pool->stopsRecieved);
+        #ifdef THREADPOOL_DEBUG
+            printf("STOPS: %d. WORKER COUNT: %d\n", stops,pool->activeWorkerCount);
+        #endif
+        cthreads_mutex_unlock(&pool->mutex);
     }
     atomic_store(&pool->stopsRecieved, 0);
     return 0;
@@ -539,6 +581,9 @@ static errno_t stopPool(ThreadPool* pool)
 
 static errno_t pauseAllPools()
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("pauseAllPools\n");
+    #endif
     u32 totalWorkerCount = 0;
     u32 i;
     for (i = 0; i < threadPoolCount; ++i)
@@ -581,6 +626,9 @@ static errno_t pauseAllPools()
 
 static errno_t unpauseAllPools()
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("unpauseAllPools\n");
+    #endif
     u32 totalWorkerCount = 0;
     u32 i;
     for (i = 0; i < threadPoolCount; ++i)
@@ -623,6 +671,9 @@ static errno_t unpauseAllPools()
 
 static errno_t unpauseAllPoolsInRange(u32 startPoolIdx, u32 count)
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("unpauseAllPoolsInRange\n");
+    #endif
     u32 totalWorkerCount = 0;
     u32 i;
     for (i = startPoolIdx; i < startPoolIdx+count; ++i)
@@ -664,6 +715,9 @@ static errno_t unpauseAllPoolsInRange(u32 startPoolIdx, u32 count)
 
 THREAD_POOL_API void ThreadPool_JoinTask(ThreadPoolTaskHandle* taskHdl__)
 {
+    #ifdef THREADPOOL_DEBUG
+        printf("ThreadPool_JoinTask\n");
+    #endif
     ThreadPoolTaskHandlePRIVATE* taskHdl = (ThreadPoolTaskHandlePRIVATE*)taskHdl__;
     uint8_t state = atomic_load(&taskHdl->state);
     while (state==0)
