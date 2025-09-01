@@ -9,6 +9,7 @@ Threadpool.c is a lightweight threadpool implementation written in C11 with a C8
 ```ThreadPool_Destroy``` - destroys a thread pool <br>
 ```ThreadPool_LaunchTask``` - launches a task <br>
 ```ThreadPool_JoinTask``` - joins a task <br>
+
 <ins> **Example**</ins>
 ```
 #include <threadpool.h>
