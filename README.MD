@@ -3,6 +3,11 @@
 
 Threadpool.c is a threadpool implementation written in C11 with a C89 interface. 
 
+<ins> **Function List** </ins>
+```ThreadPool_New``` - creates a new thread pool <br>
+```ThreadPool_Destroy``` - destroys a thread pool <br>
+```ThreadPool_LaunchTask``` - launches a task <br>
+```ThreadPool_JoinTask``` - joins a task <br>
 <ins> **Example**</ins>
 ```
 #include <threadpool.h>
