@@ -215,9 +215,11 @@ void* threadWorkerLoop(void* __args)
             if (pool->taskQueueCount>0) {
                 ThreadPoolTask task = popTaskFromTaskQueue(pool);
                 ThreadPoolTaskHandlePRIVATE* hdl = (ThreadPoolTaskHandlePRIVATE*)task.hdl;
+                cthreads_mutex_unlock(&pool->mutex);
                 task.func(task.args);
                 atomic_store(&hdl->state,1);
                 lastActiveT = clock();
+                continue;
             }
           
             if (args.timeoutMS!=0) {
