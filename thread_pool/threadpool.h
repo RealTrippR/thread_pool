@@ -19,8 +19,11 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 
+#ifdef __cplusplus
+#define THREAD_POOL_API extern "C"
+#else
 #define THREAD_POOL_API
-
+#endif
 #include <stdint.h>
 #include <errno.h>
 
