@@ -54,7 +54,9 @@ int main(int argc, char **argv)
     _CrtSetDbgFlag(_CRTDBG_LEAK_CHECK_DF);
     ThreadPoolHandle tpHdl;
     tpHdl.threadCount = TASK_POOL_THREAD_COUNT;
-
+    ThreadPoolHandle tpHdl2;
+    tpHdl2.threadCount = TASK_POOL_THREAD_COUNT;
+    
     sumRange_Args args[ITR_COUNT];
     for (uint32_t i = 0; i < ITR_COUNT;++i) {
         args[i].rangeBegin = numbersToSum + (i * BLOCK_SIZE);
@@ -64,6 +66,8 @@ int main(int argc, char **argv)
 
     clock_t t = clock();
     if (ThreadPool_New(&tpHdl, THREAD_TIMEOUT_MS))
+        return EXIT_FAILURE;
+    if (ThreadPool_New(&tpHdl2, THREAD_TIMEOUT_MS))
         return EXIT_FAILURE;
 
     ThreadPoolTaskHandle taskHdls[ITR_COUNT];

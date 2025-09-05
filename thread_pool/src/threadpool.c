@@ -159,13 +159,12 @@ void* threadWorkerLoop(void* __args)
                 cthreads_mutex_lock(&pool->mutex);
                 // check stop mask
                 if (pool->stopMask[args.threadIndex]!=0) {
-                    u8 stopsRecieved = atomic_load(&pool->stopsRecieved);
-                    stopsRecieved++;
+                    atomic_fetch_add(&pool->stopsRecieved, 1);
+
                   
                     pool->workers[args.threadIndex].active = false;
                     pool->activeWorkerCount--;
                     
-                    atomic_store(&pool->stopsRecieved, stopsRecieved);
                     cthreads_mutex_unlock(&pool->mutex);
                     cthreads_mutex_unlock(&globalMutex);
                     free(__args);
@@ -243,7 +242,7 @@ void* threadWorkerLoop(void* __args)
 THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
 {
     if (threadPoolCount==UINT32_MAX || th->threadCount==0u) {
-        return -1;
+        return -2;
     }
     th->id = threadPoolCount;
 
