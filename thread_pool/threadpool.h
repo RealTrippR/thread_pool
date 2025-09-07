@@ -34,7 +34,7 @@ typedef struct
 } ThreadPoolHandle;
 typedef struct 
 {
-    _Atomic uint8_t __;
+    uint8_t __;
 } ThreadPoolTaskHandle;
 
 typedef struct

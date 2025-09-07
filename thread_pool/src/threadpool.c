@@ -22,7 +22,6 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 #include "stdio.h"
 #include <stdatomic.h>
 #include <stdlib.h>
-#define THREADPOOL_DEBUG
 #ifdef THREADPOOL_DEBUG
     #include <stdio.h>
 #endif
@@ -68,7 +67,8 @@ typedef struct
     u16 taskQueueCount;
     u32 timeoutMS;
     u32 id;
-    _Atomic u8 stopsRecieved;
+    _Atomic u16 stopsRecieved;
+    _Atomic u16 executingThreadCount;
     struct cthreads_mutex mutex;
 } ThreadPool;
 
@@ -215,8 +215,13 @@ void* threadWorkerLoop(void* __args)
                 ThreadPoolTask task = popTaskFromTaskQueue(pool);
                 ThreadPoolTaskHandlePRIVATE* hdl = (ThreadPoolTaskHandlePRIVATE*)task.hdl;
                 cthreads_mutex_unlock(&pool->mutex);
+                atomic_fetch_add(&pool->executingThreadCount,1);
                 task.func(task.args);
+                atomic_fetch_add(&pool->executingThreadCount,-1);
                 atomic_store(&hdl->state,1);
+            #ifdef THREADPOOL_DEBUG
+                printf("Task Completed.\n");
+            #endif
                 lastActiveT = clock();
                 continue;
             }
@@ -282,6 +287,7 @@ THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
     pool->workers = calloc(th->threadCount, sizeof(pool->workers[0]));
     pool->workerCount = th->threadCount;
     pool->activeWorkerCount = 0u;
+    pool->executingThreadCount = 0u;
     pool->taskQueue = NULL;
     pool->taskQueueCount = 0u;
     pool->stopMask = calloc(th->threadCount, sizeof(u8));
@@ -466,10 +472,20 @@ THREAD_POOL_API errno_t ThreadPool_LaunchTask(ThreadPoolHandle tpHdl, ThreadPool
     ThreadPool* pool = getThreadPoolFromId(tpHdl.id);
     if (!pool)
         return -1;
+    
+    if (pool->executingThreadCount==pool->workerCount) {
+        #ifdef THREADPOOL_DEBUG
+            printf("ThreadPool_LaunchTask: Executing on same thread to prevent deadlock\n");
+        #endif
+        task.func(task.args);
+        task.hdl = taskHdl__;
+        atomic_store(&taskHdl->state,1);
+        return 0;
+    }
+
     cthreads_mutex_lock(&pool->mutex);
 
     task.hdl = taskHdl__;
-
     atomic_store(&taskHdl->state,0);
     pool->taskQueueCount++;
     u32 c = ((pool->taskQueueCount+15) / 16) * 16; // ceil to 16

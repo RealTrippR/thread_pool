@@ -21,6 +21,7 @@
         "random": "c",
         "array": "c",
         "string": "c",
-        "span": "c"
+        "span": "c",
+        "assert.h": "c"
     }
 }
