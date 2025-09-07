@@ -15,13 +15,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-//#define THREADPOOL_DEBUG
+#define THREADPOOL_DEBUG
 
 #include "threadpool.h"
 #include "cthreads.h"
 #include "stdio.h"
 #include <stdatomic.h>
 #include <stdlib.h>
+#define THREADPOOL_DEBUG
 #ifdef THREADPOOL_DEBUG
     #include <stdio.h>
 #endif
@@ -72,8 +73,6 @@ typedef struct
 } ThreadPool;
 
 static errno_t activateWorker(ThreadPool* pool, u16 poolId, u16 workerIdx);
-
-static errno_t deactivateWorker(ThreadPool* pool, u16 workerIdx);
 
 static errno_t stopPool(ThreadPool* pool);
 
@@ -177,6 +176,7 @@ void* threadWorkerLoop(void* __args)
                 paused=false;
                 // inc unpause count
                 atomic_fetch_add(&pauseState.pausedOrResumedPoolCount, 1u);
+                cthreads_mutex_unlock(&globalMutex);
                 continue;
             }
 
@@ -475,7 +475,7 @@ THREAD_POOL_API errno_t ThreadPool_LaunchTask(ThreadPoolHandle tpHdl, ThreadPool
     u32 c = ((pool->taskQueueCount+15) / 16) * 16; // ceil to 16
     pool->taskQueue = realloc(pool->taskQueue, sizeof(pool->taskQueue[0]) * c);
     if (pool->taskQueue==NULL) {
-        pool->taskQueueCount==0;
+        pool->taskQueueCount=0;
         cthreads_mutex_unlock(&pool->mutex);
         return -1;
     }
@@ -537,25 +537,6 @@ static errno_t activateWorker(ThreadPool* pool, u16 poolId, u16 workerIdx)
     return res;
 }
 
-static errno_t deactivateWorker(ThreadPool* pool, u16 workerIdx)
-{
-    #ifdef THREADPOOL_DEBUG
-        printf("deactivateWorker\n");
-    #endif
-    if (workerIdx >= pool->workerCount)
-        return -1;
-    atomic_store(&pool->stopsRecieved, 0);
-    pool->stopMask[workerIdx] = 1;
-    u8 stops = atomic_load(&pool->stopsRecieved);
-    while (stops!=1)
-    {
-        stops = atomic_load(&pool->stopsRecieved);
-    }
-
-    pool->workers[workerIdx].active = false;
-    pool->activeWorkerCount--;
-    return 0;
-}
 
 static errno_t stopPool(ThreadPool* pool)
 {

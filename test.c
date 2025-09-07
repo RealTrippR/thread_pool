@@ -21,9 +21,9 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 #include <time.h>
 #include <deps/cthreads.h>
 
-#define THREAD_TIMEOUT_MS 100 // 30 seconds
+#define THREAD_TIMEOUT_MS 5000 // 30 seconds
 #define TASK_POOL_THREAD_COUNT 2
-#define ITR_COUNT 128
+#define ITR_COUNT 32
 #define BLOCK_SIZE 262144
 typedef struct 
 {

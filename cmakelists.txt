@@ -9,7 +9,12 @@ target_include_directories(Thread_Pool PRIVATE thread_pool)
 target_include_directories(Thread_Pool PRIVATE thread_pool/deps)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_compile_options(-O2)
+     add_compile_options(-O2)
+else()
+     add_compile_definitions(THREADPOOL_DEBUG)
+     target_compile_definitions(Thread_Pool PRIVATE
+          $<$<CONFIG:Debug>:THREADPOOL_DEBUG>
+     )
 endif()
 
 if(THREAD_POOL_BUILD_AS_X32)
