@@ -390,13 +390,13 @@ THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
     }
     if (th->taskQueue) {
         free(th->taskQueue);
-        th->taskQueue=NULL;
     }
     if (th->argsList) {
         free(th->argsList);
-        th->argsList=NULL;
     }
-
+    if (th->stopMask) {
+        free(th->stopMask);
+    }
     th->workerCount = 0;
     th->activeWorkerCount = 0;
 
@@ -426,6 +426,9 @@ THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
         }
     }
     
+
+
+    // shrink id to pool lookup table
     if (maxId!=newMaxId) {
         maxId = newMaxId;
         void *tmp = realloc(threadPoolIdToIndexMap, sizeof(threadPoolIdToIndexMap[0])*(maxId+1));
@@ -447,6 +450,8 @@ THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
         threadPoolIdToIndexMap=tmp;
     }
 
+
+    // finally remove the threadpool
     threadPoolCount--;
     if (threadPoolCount==0) {
         cthreads_mutex_destroy(&globalMutex);
