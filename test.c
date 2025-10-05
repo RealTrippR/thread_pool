@@ -86,7 +86,7 @@ int main(int argc, char **argv)
         ThreadPool_JoinTask(taskHdls+i);
     }
     printf("===== PAUSE =====");
-    _sleep(500);
+    //_sleep(500);
     for (uint32_t i = 0; i < ITR_COUNT; ++i)
     {
         ThreadPool_JoinTask(taskHdls+i);

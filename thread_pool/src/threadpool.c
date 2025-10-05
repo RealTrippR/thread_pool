@@ -299,6 +299,7 @@ THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
     cthreads_mutex_unlock(&globalMutex);
 
     if (cthreads_mutex_init(&pool->mutex, NULL)) {
+        free(argList);
         unpauseAllPoolsInRange(0,prevPoolCount);
         return -1;
     }
@@ -350,9 +351,13 @@ THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
             pool->workers[i].active = false;
             pool->activeWorkerCount--;
             unpauseAllPoolsInRange(0,prevPoolCount);
+            free(argList);
             return res;
         };
     }
+
+
+    free(argList);
 
     if (unpauseAllPoolsInRange(0,prevPoolCount)) {
         return -1; }
@@ -384,6 +389,11 @@ THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
         free(th->workers);
         th->workers=NULL;
     }
+    if (th->taskQueue=NULL) {
+        free(th->taskQueue);
+        th->taskQueue=NULL;
+    }
+
     th->workerCount = 0;
     th->activeWorkerCount = 0;
 
@@ -489,7 +499,13 @@ THREAD_POOL_API errno_t ThreadPool_LaunchTask(ThreadPoolHandle tpHdl, ThreadPool
     atomic_store(&taskHdl->state,0);
     pool->taskQueueCount++;
     u32 c = ((pool->taskQueueCount+15) / 16) * 16; // ceil to 16
-    pool->taskQueue = realloc(pool->taskQueue, sizeof(pool->taskQueue[0]) * c);
+    void* tmp = realloc(pool->taskQueue, sizeof(pool->taskQueue[0]) * c);
+    if (!tmp) {
+        cthreads_mutex_unlock(&pool->mutex);
+        return -5;
+    }
+
+    pool->taskQueue = tmp;
     if (pool->taskQueue==NULL) {
         pool->taskQueueCount=0;
         cthreads_mutex_unlock(&pool->mutex);
