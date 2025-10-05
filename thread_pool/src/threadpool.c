@@ -67,6 +67,7 @@ typedef struct
     u16 taskQueueCount;
     u32 timeoutMS;
     u32 id;
+    struct cthreads_args* argsList;
     _Atomic u16 stopsRecieved;
     _Atomic u16 executingThreadCount;
     struct cthreads_mutex mutex;
@@ -294,12 +295,12 @@ THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
     pool->stopsRecieved = 0u;
     pool->timeoutMS = timeoutMS;
     pool->id = th->id;
+    pool->argsList = argList;
     threadPoolIdToIndexMap[th->id] = threadPoolCount-1;
 
     cthreads_mutex_unlock(&globalMutex);
 
     if (cthreads_mutex_init(&pool->mutex, NULL)) {
-        free(argList);
         unpauseAllPoolsInRange(0,prevPoolCount);
         return -1;
     }
@@ -351,16 +352,14 @@ THREAD_POOL_API errno_t ThreadPool_New(ThreadPoolHandle* th, u32 timeoutMS)
             pool->workers[i].active = false;
             pool->activeWorkerCount--;
             unpauseAllPoolsInRange(0,prevPoolCount);
-            free(argList);
             return res;
         };
     }
 
-
-    free(argList);
-
     if (unpauseAllPoolsInRange(0,prevPoolCount)) {
         return -1; }
+
+    
     return 0;
 }
 
@@ -389,9 +388,13 @@ THREAD_POOL_API errno_t ThreadPool_Destroy(ThreadPoolHandle* tpHdl)
         free(th->workers);
         th->workers=NULL;
     }
-    if (th->taskQueue=NULL) {
+    if (th->taskQueue) {
         free(th->taskQueue);
         th->taskQueue=NULL;
+    }
+    if (th->argsList) {
+        free(th->argsList);
+        th->argsList=NULL;
     }
 
     th->workerCount = 0;
